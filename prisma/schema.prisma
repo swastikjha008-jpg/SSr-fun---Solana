@@ -1,0 +1,177 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PublicationStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum AssetType {
+  CRYPTO
+  TOKENIZED_STOCK
+  ETF
+  OTHER
+}
+
+enum DataProvenance {
+  ILLUSTRATIVE
+  OWNER_ENTERED
+  VERIFIED_EXTERNAL
+}
+
+enum FeedbackCategory {
+  UX_OBSERVATION
+  BUG_REPORT
+  FEATURE_REQUEST
+  IMPROVEMENT_SUGGESTION
+}
+
+enum FeedbackPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FeedbackStatus {
+  OBSERVED
+  DOCUMENTED
+  SUBMITTED_EXTERNALLY
+  RESOLVED
+}
+
+model AdminUser {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  sessions     AdminSession[]
+  auditLogs    AuditLog[]
+}
+
+/// Server-side sessions. Only a SHA-256 hash of the random cookie token is stored.
+model AdminSession {
+  id          String    @id @default(cuid())
+  adminUserId String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@index([expiresAt])
+}
+
+/// Database-backed login throttling (works on serverless where memory is not shared).
+model LoginAttempt {
+  key         String    @id
+  failures    Int       @default(0)
+  windowStart DateTime  @default(now())
+  lockedUntil DateTime?
+  updatedAt   DateTime  @updatedAt
+}
+
+model ReserveProfile {
+  id                String            @id @default(cuid())
+  name              String
+  slug              String            @unique
+  description       String?
+  /// Link to the Reserve on SSR.FUN. The Reserve itself lives there, not in this database.
+  reserveUrl        String?
+  walletAddress     String?
+  network           String            @default("solana-mainnet")
+  publicationStatus PublicationStatus @default(DRAFT)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  assets            PortfolioAsset[]
+  thesis            InvestmentThesis?
+
+  @@index([publicationStatus, createdAt])
+}
+
+model PortfolioAsset {
+  id             String         @id @default(cuid())
+  reserveId      String
+  name           String
+  symbol         String
+  assetType      AssetType
+  /// Integer basis points (10000 = 100%). Never floats.
+  allocationBps  Int
+  dataProvenance DataProvenance @default(OWNER_ENTERED)
+  sourceUrl      String?
+  sortOrder      Int            @default(0)
+  reserve        ReserveProfile @relation(fields: [reserveId], references: [id], onDelete: Cascade)
+
+  @@unique([reserveId, symbol])
+  @@index([reserveId, sortOrder])
+}
+
+model InvestmentThesis {
+  id                  String         @id @default(cuid())
+  reserveId           String         @unique
+  title               String
+  philosophy          String
+  investmentRationale String
+  strategy            String
+  riskDisclosure      String
+  xPostUrl            String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  reserve             ReserveProfile @relation(fields: [reserveId], references: [id], onDelete: Cascade)
+}
+
+model BetaFeedback {
+  id                  String           @id @default(cuid())
+  title               String
+  description         String
+  category            FeedbackCategory
+  priority            FeedbackPriority @default(MEDIUM)
+  status              FeedbackStatus   @default(OBSERVED)
+  reproductionSteps   String?
+  evidenceUrl         String?
+  /// Owner-approved for the public feed. Defaults to private.
+  isPublic            Boolean          @default(false)
+  /// Self-reported: set only after the owner confirms the in-app SSR.FUN submission.
+  externalSubmittedAt DateTime?
+  externalReference   String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([status, priority])
+  @@index([isPublic, createdAt])
+  @@index([category])
+}
+
+/// Single-row table (id = "primary"). All completion flags are self-reported.
+model CampaignChecklist {
+  id                          String   @id @default("primary")
+  walletAddress               String?
+  xHandle                     String?
+  campaignSignupConfirmed     Boolean  @default(false)
+  reserveOrTradeCompleted     Boolean  @default(false)
+  officialXFollowConfirmed    Boolean  @default(false)
+  investmentPostUrl           String?
+  feedbackSubmissionConfirmed Boolean  @default(false)
+  earnSubmissionConfirmed     Boolean  @default(false)
+  updatedAt                   DateTime @updatedAt
+}
+
+model AuditLog {
+  id          String     @id @default(cuid())
+  adminUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  createdAt   DateTime   @default(now())
+  adminUser   AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}

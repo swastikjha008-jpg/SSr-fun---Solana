@@ -1,0 +1,36 @@
+.echo-text {
+  position: relative;
+  display: inline-block;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.echo-text__main {
+  position: relative;
+  z-index: 2;
+  display: block;
+  color: #fff;
+}
+
+.echo-text__layer {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+}
+
+.echo-text__layer--outline {
+  color: transparent;
+  -webkit-text-stroke: 1px currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .echo-text__layer {
+    transition: none;
+  }
+}
